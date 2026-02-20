@@ -4,6 +4,8 @@ using Microsoft.EntityFrameworkCore;
 using Serilog;
 using Serilog.Events;
 using Serilog.Sinks.MSSqlServer;
+using System.Collections.ObjectModel;
+using System.Data;
 using Login_Page_App.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -20,16 +22,36 @@ builder.Host.UseSerilog((context, services, configuration) =>
 {
     var dbConn = context.Configuration.GetConnectionString("DefaultConnection");
 
+    // Configure MSSqlServer column options to persist the User property into a separate column
+    var columnOptions = new ColumnOptions();
+    columnOptions.AdditionalColumns = new Collection<Serilog.Sinks.MSSqlServer.SqlColumn>
+    {
+        new Serilog.Sinks.MSSqlServer.SqlColumn { ColumnName = "UserName", PropertyName = "User", DataType = SqlDbType.NVarChar, DataLength = 200, AllowNull = true }
+    };
+
     configuration
         .ReadFrom.Configuration(context.Configuration)
         .Enrich.FromLogContext()
-        .WriteTo.Console()
-        // Store request logs in SQL Server table 'RequestLogs'
+        .WriteTo.Console();
+
+    // Create a filter delegate that includes only HTTP methods GET/POST/PUT/DELETE
+    bool IncludeHttpMethods(Serilog.Events.LogEvent e)
+    {
+        if (!e.Properties.TryGetValue("RequestMethod", out var prop))
+            return false;
+
+        var method = prop.ToString().Trim('"');
+        return method == "GET" || method == "POST" || method == "PUT" || method == "DELETE";
+    }
+
+    // Use a sub-logger for DB writes with filter
+    configuration.WriteTo.Logger(lc => lc
+        .Filter.ByIncludingOnly(IncludeHttpMethods)
         .WriteTo.MSSqlServer(
             connectionString: dbConn,
             sinkOptions: new MSSqlServerSinkOptions { TableName = "RequestLogs", AutoCreateSqlTable = true },
-            columnOptions: new ColumnOptions(),
-            restrictedToMinimumLevel: LogEventLevel.Information);
+            columnOptions: columnOptions,
+            restrictedToMinimumLevel: LogEventLevel.Information));
 });
 
 // Add services to the container.
