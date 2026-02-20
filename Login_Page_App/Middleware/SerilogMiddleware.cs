@@ -57,7 +57,7 @@ namespace Login_Page_App.Middleware
                    .ForContext("IsRequest", true)
                    .Information(message, context.Request.Method, context.Request.Path, context.Response?.StatusCode, sw.Elapsed.TotalMilliseconds);
 
-                if (_dbLogger?.Logger != null)
+                if (_dbLogger?.Logger != null && !string.IsNullOrEmpty(user) && !string.Equals(user, "anonymous", StringComparison.OrdinalIgnoreCase))
                 {
                     _dbLogger.Logger.ForContext("RequestPath", context.Request.Path)
                         .ForContext("RequestMethod", context.Request.Method)
@@ -85,7 +85,7 @@ namespace Login_Page_App.Middleware
                    .ForContext("IsRequest", true)
                    .Error(ex, messageEx, context.Request.Method, context.Request.Path, sw.Elapsed.TotalMilliseconds);
 
-                if (_dbLogger?.Logger != null)
+                if (_dbLogger?.Logger != null && !string.IsNullOrEmpty(user) && !string.Equals(user, "anonymous", StringComparison.OrdinalIgnoreCase))
                 {
                     _dbLogger.Logger.ForContext("RequestPath", context.Request.Path)
                         .ForContext("RequestMethod", context.Request.Method)
