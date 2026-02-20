@@ -7,6 +7,8 @@ using Serilog.Sinks.MSSqlServer;
 using System.Collections.ObjectModel;
 using System.Data;
 using Login_Page_App.Middleware;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using System.Threading.Tasks;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,40 +20,23 @@ Log.Logger = new LoggerConfiguration()
     .WriteTo.File("Logs/log-.txt", rollingInterval: RollingInterval.Day)
     .CreateBootstrapLogger();
 
+// Configure DB sink and register a dedicated DatabaseLogger in DI. The global Serilog logger will write to console/file only.
+var dbConn = builder.Configuration.GetConnectionString("DefaultConnection");
+var columnOptions = new ColumnOptions();
+columnOptions.AdditionalColumns = new Collection<Serilog.Sinks.MSSqlServer.SqlColumn>
+{
+    new Serilog.Sinks.MSSqlServer.SqlColumn { ColumnName = "UserName", PropertyName = "User", DataType = SqlDbType.NVarChar, DataLength = 200, AllowNull = true }
+};
+
+// Register DatabaseLogger so middleware can write directly to DB sink
+builder.Services.AddSingleton(new Login_Page_App.Logging.DatabaseLogger(dbConn, columnOptions));
+
 builder.Host.UseSerilog((context, services, configuration) =>
 {
-    var dbConn = context.Configuration.GetConnectionString("DefaultConnection");
-
-    // Configure MSSqlServer column options to persist the User property into a separate column
-    var columnOptions = new ColumnOptions();
-    columnOptions.AdditionalColumns = new Collection<Serilog.Sinks.MSSqlServer.SqlColumn>
-    {
-        new Serilog.Sinks.MSSqlServer.SqlColumn { ColumnName = "UserName", PropertyName = "User", DataType = SqlDbType.NVarChar, DataLength = 200, AllowNull = true }
-    };
-
     configuration
         .ReadFrom.Configuration(context.Configuration)
         .Enrich.FromLogContext()
         .WriteTo.Console();
-
-    // Create a filter delegate that includes only HTTP methods GET/POST/PUT/DELETE
-    bool IncludeHttpMethods(Serilog.Events.LogEvent e)
-    {
-        if (!e.Properties.TryGetValue("RequestMethod", out var prop))
-            return false;
-
-        var method = prop.ToString().Trim('"');
-        return method == "GET" || method == "POST" || method == "PUT" || method == "DELETE";
-    }
-
-    // Use a sub-logger for DB writes with filter
-    configuration.WriteTo.Logger(lc => lc
-        .Filter.ByIncludingOnly(IncludeHttpMethods)
-        .WriteTo.MSSqlServer(
-            connectionString: dbConn,
-            sinkOptions: new MSSqlServerSinkOptions { TableName = "RequestLogs", AutoCreateSqlTable = true },
-            columnOptions: columnOptions,
-            restrictedToMinimumLevel: LogEventLevel.Information));
 });
 
 // Add services to the container.
@@ -87,7 +72,10 @@ try
 
     app.UseHttpsRedirection();
 
-    // Serilog request logging middleware (custom)
+    // Ensure authentication runs so HttpContext.User is populated for middleware
+    app.UseAuthentication();
+
+    // Serilog request logging middleware (custom) - runs after authentication and before authorization
     app.UseMiddleware<SerilogMiddleware>();
 
     app.UseRouting();

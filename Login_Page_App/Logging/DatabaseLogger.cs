@@ -14,7 +14,8 @@ namespace Login_Page_App.Logging
                 .WriteTo.MSSqlServer(
                     connectionString: connectionString,
                     sinkOptions: new MSSqlServerSinkOptions { TableName = "RequestLogs", AutoCreateSqlTable = true },
-                    columnOptions: columnOptions)
+                    columnOptions: columnOptions,
+                    restrictedToMinimumLevel: Serilog.Events.LogEventLevel.Information)
                 .CreateLogger();
         }
     }
