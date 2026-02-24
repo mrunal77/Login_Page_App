@@ -46,6 +46,64 @@
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
+    <script>
+        // Poll for AuthExpiry cookie and show popup when expired
+        (function () {
+            function getCookie(name) {
+                const v = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+                return v ? decodeURIComponent(v.pop()) : null;
+            }
+
+            function checkExpiry() {
+                const expiry = getCookie('AuthExpiry');
+                if (!expiry) return;
+                const expDate = new Date(expiry);
+                if (isNaN(expDate)) return;
+                const now = new Date();
+
+                // If session expired, show expired alert and clear cookie
+                if (now > expDate) {
+                    document.cookie = 'AuthExpiry=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+                    alert('Your session has expired. Please log in again.');
+                    return;
+                }
+
+                // If session is about to expire in next 10 seconds, ask user to extend
+                const msLeft = expDate - now;
+                if (msLeft <= 10000) {
+                    // ask once per expiry by using a transient flag
+                    if (sessionStorage.getItem('askedExtend') === expDate.toISOString())
+                        return;
+
+                    if (confirm('Your session will expire soon. Do you want to extend your session?')) {
+                        // Call extend endpoint to refresh cookie
+                        fetch('/Account/ExtendSession', { method: 'POST', credentials: 'same-origin' })
+                            .then(r => {
+                                if (!r.ok) throw new Error('Unable to extend session');
+                                return r.json();
+                            })
+                            .then(data => {
+                                if (data && data.expiry) {
+                                    document.cookie = 'AuthExpiry=' + encodeURIComponent(data.expiry) + '; path=/;';
+                                    // Clear asked flag so we can ask again on next expiry
+                                    sessionStorage.removeItem('askedExtend');
+                                }
+                            })
+                            .catch(() => {
+                                // If extension fails, notify user
+                                alert('Could not extend session. Please log in again.');
+                            });
+                    }
+
+                    sessionStorage.setItem('askedExtend', expDate.toISOString());
+                }
+            }
+
+            // Check immediately and then every 2 seconds
+            checkExpiry();
+            setInterval(checkExpiry, 2000);
+        })();
+    </script>
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

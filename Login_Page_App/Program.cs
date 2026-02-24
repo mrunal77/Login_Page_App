@@ -49,6 +49,38 @@ builder.Services.AddDefaultIdentity<IdentityUser>(options => options.SignIn.Requ
     .AddEntityFrameworkStores<ApplicationDbContext>();
 builder.Services.AddControllersWithViews();
 
+// Configure application cookie: expire after 30 seconds and set a non-HttpOnly client cookie so UI can show a popup
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    options.Cookie.Name = "AuthCookie";
+    options.ExpireTimeSpan = TimeSpan.FromSeconds(30);
+    options.SlidingExpiration = false;
+    options.LoginPath = "/Account/Login";
+
+    options.Events = new CookieAuthenticationEvents
+    {
+        OnSignedIn = context =>
+        {
+            // Set a non-HttpOnly cookie so client JS can detect expiry and show a popup
+            var expiry = DateTimeOffset.UtcNow.AddSeconds(30);
+            context.Response.Cookies.Append("AuthExpiry", expiry.ToString("o"), new CookieOptions
+            {
+                HttpOnly = false,
+                Expires = expiry,
+                Secure = context.Request.IsHttps
+            });
+
+            return Task.CompletedTask;
+        },
+        OnSigningOut = context =>
+        {
+            // Remove client-side expiry cookie on sign-out
+            context.Response.Cookies.Delete("AuthExpiry");
+            return Task.CompletedTask;
+        }
+    };
+});
+
 var app = default(WebApplication);
 
 try
@@ -74,6 +106,9 @@ try
 
     // Ensure authentication runs so HttpContext.User is populated for middleware
     app.UseAuthentication();
+
+    // Ensure client-visible AuthExpiry cookie is set for authenticated requests
+    app.UseMiddleware<Login_Page_App.Middleware.AuthExpiryMiddleware>();
 
     // Serilog request logging middleware (custom) - runs after authentication and before authorization
     app.UseMiddleware<SerilogMiddleware>();
