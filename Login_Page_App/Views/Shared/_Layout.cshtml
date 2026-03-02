@@ -68,9 +68,39 @@
                 }
             }
 
-            connection.on("ReceiveLogoutWarning", function (secondsRemaining) {
-                console.log("Logout warning: " + secondsRemaining + " seconds remaining");
-                if (confirm("Your session will expire in " + secondsRemaining + " seconds. Do you want to extend your session?")) {
+            let logoutTimer = null;
+            let countdownInterval = null;
+
+            function showSessionModal(secondsRemaining) {
+                const modalHtml = 
+                    '<div id="sessionModal" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:flex;justify-content:center;align-items:center;z-index:9999;">' +
+                    '<div style="background:white;padding:30px;border-radius:8px;text-align:center;min-width:300px;">' +
+                    '<h4>Session Expiring</h4>' +
+                    '<p>Your session will expire in <strong id="countdown">' + secondsRemaining + '</strong> seconds.</p>' +
+                    '<p>Do you want to extend your session?</p>' +
+                    '<button id="extendBtn" class="btn btn-primary">Extend Session</button>' +
+                    '</div></div>';
+                
+                document.body.insertAdjacentHTML('beforeend', modalHtml);
+                
+                const modal = document.getElementById('sessionModal');
+                const countdownEl = document.getElementById('countdown');
+                const extendBtn = document.getElementById('extendBtn');
+                let remaining = secondsRemaining;
+
+                countdownInterval = setInterval(function() {
+                    remaining--;
+                    countdownEl.textContent = remaining;
+                    if (remaining <= 0) {
+                        clearInterval(countdownInterval);
+                    }
+                }, 1000);
+
+                extendBtn.onclick = function() {
+                    if (logoutTimer) clearTimeout(logoutTimer);
+                    if (countdownInterval) clearInterval(countdownInterval);
+                    modal.remove();
+                    
                     fetch('/Account/ExtendSession', { method: 'POST', credentials: 'same-origin' })
                         .then(r => r.json())
                         .then(data => {
@@ -79,15 +109,43 @@
                             }
                         })
                         .catch(() => {
-                            alert('Could not extend session. Please log in again.');
+                            //alert('Could not extend session. Please log in again.');
+                            window.location.href = '/Identity/Account/Login';
                         });
-                }
+                };
+            }
+
+            connection.on("ReceiveLogoutWarning", function (secondsRemaining) {
+                console.log("Logout warning: " + secondsRemaining + " seconds remaining");
+                
+                if (logoutTimer) clearTimeout(logoutTimer);
+                if (countdownInterval) clearInterval(countdownInterval);
+                
+                const existingModal = document.getElementById('sessionModal');
+                if (existingModal) existingModal.remove();
+
+                showSessionModal(secondsRemaining);
+
+                logoutTimer = setTimeout(function() {
+                    if (countdownInterval) clearInterval(countdownInterval);
+                    const modal = document.getElementById('sessionModal');
+                    if (modal) modal.remove();
+                    
+                    fetch('/Identity/Account/Logout', { method: 'POST', credentials: 'same-origin' })
+                        .then(function() {
+                            document.cookie = 'AuthExpiry=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+                            window.location.href = '/Identity/Account/Login';
+                        })
+                        .catch(function() {
+                            window.location.href = '/Identity/Account/Login';
+                        });
+                }, secondsRemaining * 1000);
             });
 
             connection.on("ReceiveSessionExpired", function () {
                 console.log("Session expired");
                 document.cookie = 'AuthExpiry=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-                alert('Your session has expired. Please log in again.');
+                //alert('Your session has expired. Please log in again.');
                 window.location.href = '/Identity/Account/Login';
             });
 
