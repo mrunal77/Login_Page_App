@@ -46,62 +46,52 @@
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
     <script>
-        // Poll for AuthExpiry cookie and show popup when expired
         (function () {
-            function getCookie(name) {
-                const v = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
-                return v ? decodeURIComponent(v.pop()) : null;
-            }
+            const userId = '@User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value';
+            if (!userId) return;
 
-            function checkExpiry() {
-                const expiry = getCookie('AuthExpiry');
-                if (!expiry) return;
-                const expDate = new Date(expiry);
-                if (isNaN(expDate)) return;
-                const now = new Date();
+            const connection = new signalR.HubConnectionBuilder()
+                .withUrl("/notificationHub")
+                .withAutomaticReconnect()
+                .build();
 
-                // If session expired, show expired alert and clear cookie
-                if (now > expDate) {
-                    document.cookie = 'AuthExpiry=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-                    alert('Your session has expired. Please log in again.');
-                    return;
-                }
-
-                // If session is about to expire in next 10 seconds, ask user to extend
-                const msLeft = expDate - now;
-                if (msLeft <= 10000) {
-                    // ask once per expiry by using a transient flag
-                    if (sessionStorage.getItem('askedExtend') === expDate.toISOString())
-                        return;
-
-                    if (confirm('Your session will expire soon. Do you want to extend your session?')) {
-                        // Call extend endpoint to refresh cookie
-                        fetch('/Account/ExtendSession', { method: 'POST', credentials: 'same-origin' })
-                            .then(r => {
-                                if (!r.ok) throw new Error('Unable to extend session');
-                                return r.json();
-                            })
-                            .then(data => {
-                                if (data && data.expiry) {
-                                    document.cookie = 'AuthExpiry=' + encodeURIComponent(data.expiry) + '; path=/;';
-                                    // Clear asked flag so we can ask again on next expiry
-                                    sessionStorage.removeItem('askedExtend');
-                                }
-                            })
-                            .catch(() => {
-                                // If extension fails, notify user
-                                alert('Could not extend session. Please log in again.');
-                            });
-                    }
-
-                    sessionStorage.setItem('askedExtend', expDate.toISOString());
+            async function startConnection() {
+                try {
+                    await connection.start();
+                    await connection.invoke("JoinUserGroup", userId);
+                    console.log("SignalR connected");
+                } catch (err) {
+                    console.error("SignalR connection error:", err);
+                    setTimeout(startConnection, 5000);
                 }
             }
 
-            // Check immediately and then every 2 seconds
-            checkExpiry();
-            setInterval(checkExpiry, 2000);
+            connection.on("ReceiveLogoutWarning", function (secondsRemaining) {
+                console.log("Logout warning: " + secondsRemaining + " seconds remaining");
+                if (confirm("Your session will expire in " + secondsRemaining + " seconds. Do you want to extend your session?")) {
+                    fetch('/Account/ExtendSession', { method: 'POST', credentials: 'same-origin' })
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data && data.expiry) {
+                                document.cookie = 'AuthExpiry=' + encodeURIComponent(data.expiry) + '; path=/;';
+                            }
+                        })
+                        .catch(() => {
+                            alert('Could not extend session. Please log in again.');
+                        });
+                }
+            });
+
+            connection.on("ReceiveSessionExpired", function () {
+                console.log("Session expired");
+                document.cookie = 'AuthExpiry=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+                alert('Your session has expired. Please log in again.');
+                window.location.href = '/Identity/Account/Login';
+            });
+
+            startConnection();
         })();
     </script>
     @await RenderSectionAsync("Scripts", required: false)

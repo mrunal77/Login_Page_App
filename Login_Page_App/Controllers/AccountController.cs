@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Login_Page_App.Services;
 
 namespace Login_Page_App.Controllers
 {
@@ -11,11 +12,16 @@ namespace Login_Page_App.Controllers
     {
         private readonly UserManager<IdentityUser> _userManager;
         private readonly SignInManager<IdentityUser> _signInManager;
+        private readonly ISessionTracker _sessionTracker;
 
-        public AccountController(UserManager<IdentityUser> userManager, SignInManager<IdentityUser> signInManager)
+        public AccountController(
+            UserManager<IdentityUser> userManager, 
+            SignInManager<IdentityUser> signInManager,
+            ISessionTracker sessionTracker)
         {
             _userManager = userManager;
             _signInManager = signInManager;
+            _sessionTracker = sessionTracker;
         }
 
         [HttpPost]
@@ -27,13 +33,10 @@ namespace Login_Page_App.Controllers
             if (user == null)
                 return Unauthorized();
 
-            // Refresh the sign-in cookie to extend session
             await _signInManager.RefreshSignInAsync(user);
 
-            // New expiry (match the cookie ExpireTimeSpan configured in Program.cs — 30 seconds)
             var expiry = DateTimeOffset.UtcNow.AddSeconds(30);
 
-            // Set a client-visible cookie so JS can detect expiry
             Response.Cookies.Append("AuthExpiry", expiry.ToString("o"), new Microsoft.AspNetCore.Http.CookieOptions
             {
                 HttpOnly = false,
@@ -42,8 +45,9 @@ namespace Login_Page_App.Controllers
                 Path = "/"
             });
 
+            _sessionTracker.AddOrUpdateSession(user.Id, expiry);
+
             return Json(new { expiry = expiry.ToString("o") });
         }
     }
 }
-

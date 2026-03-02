@@ -7,6 +7,7 @@ using Serilog.Sinks.MSSqlServer;
 using System.Collections.ObjectModel;
 using System.Data;
 using Login_Page_App.Middleware;
+using Login_Page_App.Services;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using System.Threading.Tasks;
 
@@ -48,6 +49,11 @@ builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 builder.Services.AddDefaultIdentity<IdentityUser>(options => options.SignIn.RequireConfirmedAccount = true)
     .AddEntityFrameworkStores<ApplicationDbContext>();
 builder.Services.AddControllersWithViews();
+
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<ISessionTracker, SessionTracker>();
+builder.Services.AddSingleton<INotificationService, NotificationService>();
+builder.Services.AddHostedService<SessionMonitorService>();
 
 // Configure application cookie: expire after 30 seconds and set a non-HttpOnly client cookie so UI can show a popup
 builder.Services.ConfigureApplicationCookie(options =>
@@ -126,6 +132,8 @@ try
 
     app.MapRazorPages()
        .WithStaticAssets();
+
+    app.MapHub<Login_Page_App.Hubs.NotificationHub>("/notificationHub");
 
     app.Run();
 }

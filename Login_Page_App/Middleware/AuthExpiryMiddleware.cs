@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
+using Login_Page_App.Services;
 
 namespace Login_Page_App.Middleware
 {
@@ -8,21 +9,25 @@ namespace Login_Page_App.Middleware
     {
         private readonly RequestDelegate _next;
         private readonly TimeSpan _expiry = TimeSpan.FromSeconds(30);
+        private readonly ISessionTracker? _sessionTracker;
 
-        public AuthExpiryMiddleware(RequestDelegate next)
+        public AuthExpiryMiddleware(RequestDelegate next, ISessionTracker? sessionTracker = null)
         {
             _next = next ?? throw new ArgumentNullException(nameof(next));
+            _sessionTracker = sessionTracker;
         }
 
         public async Task InvokeAsync(HttpContext context)
         {
-            // Only set client-visible AuthExpiry for authenticated users when missing
             if (context.User?.Identity?.IsAuthenticated == true)
             {
+                var userId = context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
                 var existing = context.Request.Cookies["AuthExpiry"];
+                DateTimeOffset expiry;
+
                 if (string.IsNullOrEmpty(existing))
                 {
-                    var expiry = DateTimeOffset.UtcNow.Add(_expiry);
+                    expiry = DateTimeOffset.UtcNow.Add(_expiry);
                     context.Response.Cookies.Append("AuthExpiry", expiry.ToString("o"), new CookieOptions
                     {
                         HttpOnly = false,
@@ -30,6 +35,15 @@ namespace Login_Page_App.Middleware
                         Secure = context.Request.IsHttps,
                         Path = "/"
                     });
+                }
+                else
+                {
+                    expiry = DateTimeOffset.Parse(existing);
+                }
+
+                if (!string.IsNullOrEmpty(userId) && _sessionTracker != null)
+                {
+                    _sessionTracker.AddOrUpdateSession(userId, expiry);
                 }
             }
 
