@@ -22,24 +22,16 @@ namespace Login_Page_App.Middleware
             if (context.User?.Identity?.IsAuthenticated == true)
             {
                 var userId = context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-                var existing = context.Request.Cookies["AuthExpiry"];
-                DateTimeOffset expiry;
-
-                if (string.IsNullOrEmpty(existing))
+                
+                var expiry = DateTimeOffset.UtcNow.Add(_expiry);
+                context.Response.Cookies.Append("AuthExpiry", expiry.ToString("o"), new CookieOptions
                 {
-                    expiry = DateTimeOffset.UtcNow.Add(_expiry);
-                    context.Response.Cookies.Append("AuthExpiry", expiry.ToString("o"), new CookieOptions
-                    {
-                        HttpOnly = false,
-                        Expires = expiry,
-                        Secure = context.Request.IsHttps,
-                        Path = "/"
-                    });
-                }
-                else
-                {
-                    expiry = DateTimeOffset.Parse(existing);
-                }
+                    HttpOnly = false,
+                    Expires = expiry,
+                    Secure = context.Request.IsHttps,
+                    Path = "/",
+                    SameSite = SameSiteMode.Lax
+                });
 
                 if (!string.IsNullOrEmpty(userId) && _sessionTracker != null)
                 {

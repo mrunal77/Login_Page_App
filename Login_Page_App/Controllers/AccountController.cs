@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Login_Page_App.Services;
+using Microsoft.AspNetCore.Authentication;
 
 namespace Login_Page_App.Controllers
 {
@@ -33,21 +34,39 @@ namespace Login_Page_App.Controllers
             if (user == null)
                 return Unauthorized();
 
-            await _signInManager.RefreshSignInAsync(user);
+            var authProperties = new AuthenticationProperties
+            {
+                IsPersistent = true,
+                ExpiresUtc = DateTimeOffset.UtcNow.AddSeconds(30)
+            };
+            
+            await _signInManager.SignInAsync(user, authProperties);
 
             var expiry = DateTimeOffset.UtcNow.AddSeconds(30);
 
-            Response.Cookies.Append("AuthExpiry", expiry.ToString("o"), new Microsoft.AspNetCore.Http.CookieOptions
+            var cookieOptions = new Microsoft.AspNetCore.Http.CookieOptions
             {
                 HttpOnly = false,
                 Expires = expiry,
                 Secure = Request.IsHttps,
-                Path = "/"
-            });
+                Path = "/",
+                SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Lax
+            };
+
+            Response.Cookies.Append("AuthExpiry", expiry.ToString("o"), cookieOptions);
 
             _sessionTracker.AddOrUpdateSession(user.Id, expiry);
 
             return Json(new { expiry = expiry.ToString("o") });
+        }
+
+        [Route("Account/Logout")]
+        public async Task<IActionResult> Logout()
+        {
+            await _signInManager.SignOutAsync();
+            Response.Cookies.Delete("AuthCookie");
+            Response.Cookies.Delete("AuthExpiry");
+            return RedirectToPage("/Account/Login", new { area = "Identity" });
         }
     }
 }

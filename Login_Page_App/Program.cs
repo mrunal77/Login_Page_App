@@ -55,32 +55,31 @@ builder.Services.AddSingleton<ISessionTracker, SessionTracker>();
 builder.Services.AddSingleton<INotificationService, NotificationService>();
 builder.Services.AddHostedService<SessionMonitorService>();
 
-// Configure application cookie: expire after 30 seconds and set a non-HttpOnly client cookie so UI can show a popup
+// Configure application cookie: session extends by 30 seconds when user interacts
 builder.Services.ConfigureApplicationCookie(options =>
 {
     options.Cookie.Name = "AuthCookie";
     options.ExpireTimeSpan = TimeSpan.FromSeconds(30);
-    options.SlidingExpiration = false;
-    options.LoginPath = "/Account/Login";
+    options.SlidingExpiration = true;
+    options.LoginPath = "/Identity/Account/Login";
 
     options.Events = new CookieAuthenticationEvents
     {
         OnSignedIn = context =>
         {
-            // Set a non-HttpOnly cookie so client JS can detect expiry and show a popup
             var expiry = DateTimeOffset.UtcNow.AddSeconds(30);
             context.Response.Cookies.Append("AuthExpiry", expiry.ToString("o"), new CookieOptions
             {
                 HttpOnly = false,
                 Expires = expiry,
-                Secure = context.Request.IsHttps
+                Secure = context.Request.IsHttps,
+                SameSite = SameSiteMode.Lax
             });
 
             return Task.CompletedTask;
         },
         OnSigningOut = context =>
         {
-            // Remove client-side expiry cookie on sign-out
             context.Response.Cookies.Delete("AuthExpiry");
             return Task.CompletedTask;
         }
