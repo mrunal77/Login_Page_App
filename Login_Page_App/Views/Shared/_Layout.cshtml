@@ -48,6 +48,21 @@
     <script src="~/js/site.js" asp-append-version="true"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
     <script>
+        window.onpageshow = function(event) {
+            if (event.persisted) {
+                window.location.href = '/Account/Logout';
+            }
+        };
+        
+        var userId = '@User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value';
+        if (userId) {
+            history.pushState(null, document.title, location.href);
+            window.addEventListener("popstate", function(event) {
+                window.location.href = '/Account/Logout';
+            });
+        }
+    </script>
+    <script>
         (function () {
             const userId = '@User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value';
             if (!userId) return;
