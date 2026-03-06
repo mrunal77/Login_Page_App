@@ -95,7 +95,7 @@
             }
 
             function resetIdleTimer() {
-                if (idleTimer) clearTimeout(idleTimer);
+            if (idleTimer) {clearTimeout(idleTimer);/* extendSession(); */}
                 
                 idleTimer = setTimeout(function() {
                     wasIdle = true;
@@ -151,7 +151,7 @@
                     if (logoutTimer) clearTimeout(logoutTimer);
                     if (countdownInterval) clearInterval(countdownInterval);
                     modal.remove();
-                    window.location.href = '/Account/Logout';
+                    //window.location.href = '/Account/Logout';
                 };
             }
 
@@ -210,7 +210,7 @@
                     if (logoutTimer) clearTimeout(logoutTimer);
                     if (countdownInterval) clearInterval(countdownInterval);
                     modal.remove();
-                    window.location.href = '/Account/Logout';
+                    //window.location.href = '/Account/Logout';
                 };
             }
 
